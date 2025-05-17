@@ -45,6 +45,21 @@ int main() {
     SimpleErrorHandler errorHandler;
     kj::TaskSet task_set(errorHandler);
 
+    // ストリームが登録されていない段階でのアクセス
+    try {
+      auto stream = client.getMain<NotificationStream>();
+      auto nResp = stream.readRequest().send().wait(ws);
+      if (nResp.hasResult()) {
+        printNotification(nResp.getResult());
+      } else {
+        std::cout << "[Client] Stream ended." << std::endl;
+        return 0;
+      }
+    } catch (kj::Exception& e) {
+      LOG_COUT << "Failed to read from stream: " << e.getDescription().cStr()
+               << std::endl;
+    }
+
     auto notifier = client.getMain<Notifier>();
 
     // ── Subscribe リクエスト送信 ──
