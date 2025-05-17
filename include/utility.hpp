@@ -36,4 +36,5 @@ inline std::string get_current_time_string() {
   std::cout << get_current_time_string() << "[" << __FILE__ << ":" << __LINE__ \
             << "]"
 
+
 #endif  // UTILITY_HPP
