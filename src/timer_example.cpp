@@ -48,7 +48,7 @@ class RepeatingTimerWithCancel {
    * @param interval 実行間隔（kj::Duration）
    * @param callback 実行する処理（std::function<void()>）
    */
-  void start(kj::Duration interval, std::function<void()> callback) {
+  void start(const kj::Duration interval, std::function<void()> &&callback) {
     this->interval = interval;
     this->callback = callback;
     scheduleNext();  ///< 最初の1回目のスケジュールを行う
@@ -59,7 +59,7 @@ class RepeatingTimerWithCancel {
    *
    * @param reason キャンセル理由（ログ出力用）
    */
-  void cancel(const char* reason) {
+  void cancel(const char* reason) const {
     canceler.cancel(reason);  ///< すべての未完了タスクにキャンセル通知
   }
 
@@ -76,14 +76,16 @@ class RepeatingTimerWithCancel {
   void scheduleNext() {
     auto promise = canceler.wrap(timer.afterDelay(interval))
                        .then([this]() {
-                         if (callback) callback();  ///< タイマー満了時にコールバック実行
+                         if (callback)
+                           callback();  ///< タイマー満了時にコールバック実行
                        })
                        .then([this]() {
                          scheduleNext();  ///< 再帰的に次回スケジュール
                        })
                        .catch_([](kj::Exception&& e) {
-                         LOG_COUT << "Timer canceled: "
-                                  << e.getDescription().cStr() << std::endl;
+                         LOG_COUT
+                             << "Timer canceled: " << e.getDescription().cStr()
+                             << std::endl;
                        });
 
     taskSet.add(kj::mv(promise));  ///< TaskSet に登録して管理
@@ -111,9 +113,7 @@ int main() {
   auto timer_test = [&]() {
     // 100ミリ秒間隔でタイマー発火させる
     repeatingTimer.start(100 * kj::MILLISECONDS,
-                         []() {
-                           LOG_COUT << "Timer fired!" << std::endl;
-                         });
+                         []() { LOG_COUT << "Timer fired!" << std::endl; });
 
     // 1秒後にキャンセルを実行
     timer.afterDelay(1 * kj::SECONDS)
