@@ -65,16 +65,25 @@ int main() {
 
   RepeatingTimerWithCancel repeatingTimer(timer, taskSet, canceler);
 
-  repeatingTimer.start(1 * kj::SECONDS,
-                       []() { LOG_COUT << "Timer fired!" << std::endl; });
+  auto timer_test = [&]() {
+    repeatingTimer.start(100 * kj::MILLISECONDS,
+                         []() { LOG_COUT << "Timer fired!" << std::endl; });
 
-  timer.afterDelay(6 * kj::SECONDS)
-      .then([&]() {
-        LOG_COUT << "Stopping timer" << std::endl;
-        repeatingTimer.cancel("Manual cancel after 6 seconds");
-      })
-      .wait(ws);
+    timer.afterDelay(1 * kj::SECONDS)
+        .then([&]() {
+          LOG_COUT << "Stopping timer" << std::endl;
+          repeatingTimer.cancel("Manual cancel after 6 seconds");
+        })
+        .wait(ws);
 
-  taskSet.onEmpty().wait(ws);
+    taskSet.onEmpty().wait(ws);
+  };
+
+  timer_test();
+  timer_test();
+
+  // timer is not set and try to cancel
+  repeatingTimer.cancel("Manual cancel before starting");
+
   return 0;
 }
