@@ -1,0 +1,45 @@
+@startuml
+actor Client
+participant "NotifierImpl (Server)" as Notifier
+participant "SubscriptionImpl" as Subscription
+participant "StreamImpl" as Stream
+participant Timer
+
+== 通知サブスクリプション開始 ==
+
+Client -> Notifier : subscribeRequest(filter="Notifier")
+activate Notifier
+
+Notifier -> Subscription : new SubscriptionImpl(state)
+Notifier -> Stream : new StreamImpl(state, timer)
+Notifier --> Client : (Subscription, Stream)
+deactivate Notifier
+
+== 通知の受信ループ開始 ==
+
+loop every 200ms until cancel
+  Client -> Stream : read()
+  activate Stream
+  Stream -> Timer : afterDelay(200ms)
+  Timer --> Stream : delay complete
+  Stream --> Client : Notification(id=N, kind="demo", timestamp)
+  deactivate Stream
+end
+
+== キャンセル ==
+
+Client -> Subscription : cancel()
+activate Subscription
+Subscription -> Subscription : state.cancelled = true
+Subscription --> Client : void
+deactivate Subscription
+
+== ストリーム終了 ==
+
+Client -> Stream : read()
+activate Stream
+Stream -> Stream : check state.cancelled
+Stream --> Client : throws Exception ("stream closed")
+deactivate Stream
+
+@enduml

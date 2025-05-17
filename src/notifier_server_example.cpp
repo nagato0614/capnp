@@ -76,6 +76,10 @@ class NotifierImpl final : public Notifier::Server {
 
   kj::Promise<void> subscribe(SubscribeContext ctx) override {
     KJ_REQUIRE(timer_ptr_ != nullptr, "Timer not set!");
+    // params を表示
+    auto params = ctx.getParams();
+    LOG_COUT << "[Notifier] subscribe: filter="
+             << params.getParams().getFilter().cStr() << std::endl;
     state_ = kj::heap<SharedState>();
 
     ctx.getResults().setStream(kj::heap<StreamImpl>(*state_, *timer_ptr_));
