@@ -15,14 +15,15 @@
 #ifndef UTILITY_HPP
 #define UTILITY_HPP
 
-std::string get_current_time_string() {
+inline std::string get_current_time_string() {
   using namespace std::chrono;
 
-  auto now = system_clock::now();
-  auto in_time_t = system_clock::to_time_t(now);
-  auto fractional = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+  const auto now = system_clock::now();
+  const auto in_time_t = system_clock::to_time_t(now);
+  const auto fractional =
+      duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
 
-  std::tm local_time = *std::localtime(&in_time_t);
+  const std::tm local_time = *std::localtime(&in_time_t);
 
   std::ostringstream oss;
   oss << "[" << std::put_time(&local_time, "%H:%M:%S") << '.' << std::setw(3)
@@ -32,7 +33,7 @@ std::string get_current_time_string() {
 }
 
 #define LOG_COUT                                                               \
-std::cout << get_current_time_string() << "[" << __FILE__ << ":" << __LINE__ \
-<< "]"
+  std::cout << get_current_time_string() << "[" << __FILE__ << ":" << __LINE__ \
+            << "]"
 
-#endif //UTILITY_HPP
+#endif  // UTILITY_HPP
