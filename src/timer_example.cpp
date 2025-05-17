@@ -48,7 +48,7 @@ class RepeatingTimerWithCancel {
    * @param interval 実行間隔（kj::Duration）
    * @param callback 実行する処理（std::function<void()>）
    */
-  void start(const kj::Duration interval, std::function<void()> &&callback) {
+  void start(const kj::Duration interval, std::function<void()>&& callback) {
     this->interval = interval;
     this->callback = callback;
     scheduleNext();  ///< 最初の1回目のスケジュールを行う
@@ -122,13 +122,18 @@ int main() {
           repeatingTimer.cancel("Manual cancel after 1 second");
         })
         .wait(ws);  ///< Promise の完了を待機
-
-    // すべてのタスクが終了するのを待つ
-    taskSet.onEmpty().wait(ws);
   };
+
+  // タイマーと同時並行に行う処理を追加
+  auto additional_task = timer.afterDelay(3 * kj::SECONDS).then([&]() {
+    LOG_COUT << "Additional task executed after 3 seconds" << std::endl;
+  });
+  taskSet.add(kj::mv(additional_task));
 
   timer_test();  ///< 1回目のテスト
   timer_test();  ///< 2回目のテスト（再利用可能性の確認）
+
+  taskSet.onEmpty().wait(ws);  ///< TaskSet が空になるまで待機
 
   // タイマーが未起動の状態で cancel() しても安全に処理される
   repeatingTimer.cancel("Manual cancel before starting");

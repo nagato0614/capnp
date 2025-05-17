@@ -8,14 +8,22 @@ find_package(CapnProto REQUIRED)
 include_directories(${CAPNP_INCLUDE_DIRS})
 add_definitions(${CAPNP_DEFINITIONS})
 
+# ターゲットを登録する関数
+function(add_example name)
+    add_executable(${name} src/${name}.cpp)
+    target_include_directories(${name}
+            PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(${name}
+            CapnProto::kj
+            CapnProto::kj-async
+            CapnProto::capnp
+            CapnProto::capnpc
+    )
+endfunction(add_example)
+
+
 
 # timer_example
-add_executable(timer_example src/timer_example.cpp)
-target_include_directories(timer_example
-        PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-target_link_libraries(timer_example
-        CapnProto::kj
-        CapnProto::kj-async
-)
+add_example(timer_example)
