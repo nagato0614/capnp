@@ -17,13 +17,14 @@ class SimpleErrorHandler final : public kj::TaskSet::ErrorHandler {
 int main() {
   auto io = kj::setupAsyncIo();
   auto& ws = io.waitScope;
+  auto& timer = io.provider->getTimer();
 
   SimpleErrorHandler errorHandler;
   kj::TaskSet taskSet(errorHandler);
   auto& executor = kj::getCurrentThreadExecutor();
 
   // 別スレッドからメインスレッドにタスクを送信
-  std::thread worker([&executor]() {
+  std::thread worker([&]() {
     try {
       executor.executeSync([]() -> kj::Promise<void> {
         // ここは Executor スレッドで動く（EventLoop がある）
@@ -37,6 +38,13 @@ int main() {
       LOG_COUT << "[Worker] Exception: " << e.getDescription().cStr()
                << std::endl;
     }
+
+    // ここはエラーになる
+    // taskSet.add(kj::evalLater([] {
+    //   // スレッドのIDを取得
+    //   const std::thread::id tid = std::this_thread::get_id();
+    //   LOG_COUT << "[Worker] Hello from task ID: " << tid << std::endl;
+    // }));
   });
 
   {
