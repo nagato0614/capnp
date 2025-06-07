@@ -25,8 +25,8 @@ class ReusableTask {
   kj::Promise<void> start() { return run(); }
 
  private:
-  kj::Timer& timer;      ///< 使用する kj::Timer の参照
-  uint32_t remaining;    ///< 残りの待機時間（ミリ秒）
+  kj::Timer& timer;    ///< 使用する kj::Timer の参照
+  uint32_t remaining;  ///< 残りの待機時間（ミリ秒）
 
   /**
    * @brief タスク内部処理。100ms ごとに繰り返し待機。
@@ -101,6 +101,15 @@ int main() {
     timed.wait(ws);
 
     LOG_COUT << "[Main] Task completed without timeout.\n";
+
+    LOG_COUT << "[Main] Task2 Start \n";
+
+    ReusableTask task2(timer, 1000);
+    auto promise2 = task2.start();
+    auto timeout2 =
+        timeoutSafe(kj::mv(promise2), timer, 500 * kj::MILLISECONDS);
+
+    LOG_COUT << "[Main] Task2 completed without timeout.\n";
 
   } catch (const kj::Exception& e) {
     LOG_COUT << "[Main] Task timeout or error: " << e.getDescription().cStr()
