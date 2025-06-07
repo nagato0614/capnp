@@ -5,9 +5,6 @@
 #ifndef TEMP_LIB_HPP
 #define TEMP_LIB_HPP
 
-#include <kj/common.h>
-#include "repeating_timer_with_cancel.hpp"
-
 namespace nagato {
 
 class TempLibBase {

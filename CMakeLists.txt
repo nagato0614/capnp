@@ -18,6 +18,7 @@ message(STATUS "Cap'n Proto generated headers: ${CAPNP_HDRS}")
 
 # ターゲットを登録する関数
 function(add_example name)
+    message(STATUS "Adding example: ${name}")
     add_executable(${name} src/${name}.cpp ${CAPNP_SRCS} ${CAPNP_HDRS})
     target_include_directories(${name}
             PRIVATE
@@ -38,3 +39,4 @@ add_example(notifier_client_example)
 add_example(notifier_server_example)
 add_example(temp_lib)
 add_example(executer_example)
+add_example(delay_example)
