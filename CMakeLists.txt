@@ -1,8 +1,7 @@
-cmake_minimum_required(VERSION 3.14)
-project(capnproto_examples)
+cmake_minimum_required(VERSION 3.28)
+project(capnp)
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(CapnProto REQUIRED)
 include_directories(${CAPNP_INCLUDE_DIRS})
@@ -40,3 +39,5 @@ add_example(notifier_server_example)
 add_example(temp_lib)
 add_example(executer_example)
 add_example(delay_example)
+add_example(poling_server)
+add_example(poling_client)

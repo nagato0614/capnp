@@ -29,3 +29,21 @@ interface Notifier {
       -> (subscription :Subscription,
           stream :NotificationStream);
 }
+
+# ポーリング用の通知受信インターフェース
+interface PollingNotificationReceiver {
+  # クライアントがこのメソッドを実装し、サーバーがコンテキスト経由で通知を送信
+  onNotification @0 (notification :Notification) -> ();
+}
+
+# ポーリング購読セッション
+interface PollingSubscription {
+  cancel @0 () -> ();
+}
+
+# ポーリング用のNotifier
+interface PollingNotifier {
+  # クライアントがreceiverを渡し、サーバーがそのreceiverに通知を送信
+  subscribe @0 (filter :Text, receiver :PollingNotificationReceiver)
+      -> (subscription :PollingSubscription);
+}
