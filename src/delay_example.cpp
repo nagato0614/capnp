@@ -1,120 +1,152 @@
+// delay_example.cpp ----------------------------------------------------------
 #include <kj/async-io.h>
 #include <kj/debug.h>
 
+#include <chrono>
 #include <iostream>
 #include <utility.hpp>
 
-/**
- * @class ReusableTask
- * @brief 指定された時間分だけ非同期に待機する再利用可能なタスク。
- */
+// -----------------------------------------------------------------------------
+// 再利用可能な「100 ms刻みスリープ」タスク
 class ReusableTask {
  public:
-  /**
-   * @brief コンストラクタ。
-   * @param timer 非同期タイマーオブジェクトへの参照。
-   * @param totalMs タスクが完了するまでの総待機時間（ミリ秒）。
-   */
   ReusableTask(kj::Timer& timer, uint32_t totalMs)
       : timer(timer), remaining(totalMs) {}
 
-  /**
-   * @brief タスクの実行を開始する。
-   * @return タスクの完了を表す Promise。
-   */
   kj::Promise<void> start() { return run(); }
 
  private:
-  kj::Timer& timer;    ///< 使用する kj::Timer の参照
-  uint32_t remaining;  ///< 残りの待機時間（ミリ秒）
+  kj::Timer& timer;
+  uint32_t remaining;
 
-  /**
-   * @brief タスク内部処理。100ms ごとに繰り返し待機。
-   * @return タスク完了を表す Promise。
-   */
   kj::Promise<void> run() {
     if (remaining == 0) {
       LOG_COUT << "[ReusableTask] Task complete.\n";
       return kj::READY_NOW;
     }
-
-    LOG_COUT << "[ReusableTask] Waiting... Remaining = " << remaining << "ms\n";
+    LOG_COUT << "[ReusableTask] Waiting... Remaining = " << remaining
+             << " ms\n";
     remaining -= 100;
-
-    return timer.afterDelay(100 * kj::MILLISECONDS).then([this]() {
+    return timer.afterDelay(100 * kj::MILLISECONDS).then([this] {
       return run();
     });
   }
 };
 
-/**
- * @brief タスクをタイムアウト付きで安全に実行する。
- *
- * タスクが完了すれば true、タイムアウトに達した場合は false を返す。
- * 例外はスローされない。
- *
- * @param task 実行する非同期タスク。
- * @param timer タイマーオブジェクト。
- * @param timeout タイムアウトの時間。
- * @return 完了フラグ（true = 成功, false = タイムアウト）。
- */
+// -----------------------------------------------------------------------------
+// タイムアウト付き実行（失敗時は false・例外を投げない）
 kj::Promise<bool> timeoutSafe(kj::Promise<void>&& task, kj::Timer& timer,
                               kj::Duration timeout) {
-  auto timeoutPromise = timer.afterDelay(timeout).then([]() {
-    LOG_COUT << "[ReusableTask] Timeout : Task timed out.\n";
-    return false;
+  // キャンセラとフラグをヒープに確保して attach() で保持する
+  auto cancelerOwn = kj::heap<kj::Canceler>();
+  auto doneOwn = kj::heap<bool>(false);
+  auto* canceler = cancelerOwn.get();
+  auto* doneFlag = doneOwn.get();
+
+  auto cancelableTask = canceler->wrap(kj::mv(task));
+
+  // ① タスク完了時
+  auto guardedTask = kj::mv(cancelableTask)
+                         .then([doneFlag] {
+                           *doneFlag = true;
+                           LOG_COUT << "[timeoutSafe] Task completed.\n";
+                           return true;
+                         })
+                         .catch_([doneFlag](kj::Exception&& e) {
+                           if (!*doneFlag) {  // キャンセル or 失敗
+                             LOG_COUT
+                                 << "[timeoutSafe] Task cancelled / failed: "
+                                 << e.getDescription().cStr() << '\n';
+                           }
+                           return false;
+                         });
+
+  // ② タイムアウト時
+  auto timeoutP = timer.afterDelay(timeout).then([doneFlag, canceler] {
+    if (!*doneFlag) {
+      LOG_COUT << "[timeoutSafe] Timeout -> cancelling task …\n";
+      canceler->cancel("timeout");  // 強制キャンセル
+      return false;
+    }
+    return true;  // 既に完了
   });
 
-  /*
-   * exclusiveJoin は 2つの Promise を同時に待機し、
-   * どちらかが完了した時点で結果を返す。
-   *
-   * ここでは task が完了した場合は true を返し、
-   * timeoutPromise が完了した場合は false を返す。
-   */
-  return kj::mv(task)
-      .then([]() {
-        LOG_COUT << "[ReusableTask] Timeout : Task completed successfully.\n";
-        return true;
-      })
-      .exclusiveJoin(kj::mv(timeoutPromise));
+  // ③ どちらか早い方
+  return guardedTask.exclusiveJoin(kj::mv(timeoutP))
+      .attach(kj::mv(cancelerOwn), kj::mv(doneOwn));
 }
 
-/**
- * @brief メイン関数。
- *
- * ReusableTask を 5 秒間実行するが、1 秒のタイムアウトで制御する。
- * タイムアウトしても例外をスローせずに終了する。
- */
+// -----------------------------------------------------------------------------
+// メイン
 int main() {
   try {
     auto io = kj::setupAsyncIo();
-    kj::Timer& timer = io.provider->getTimer();
-    kj::WaitScope& ws = io.waitScope;
+    auto& timer = io.provider->getTimer();
+    auto& ws = io.waitScope;
 
-    LOG_COUT << "[Main] Starting ReusableTask with timeout...\n";
+    // ---------- Task1: 5 s 仕事, timeout 1 s ----------
+    LOG_COUT << "[Main] Task1 (5 s) / timeout 1 s …\n";
+    ReusableTask t1(timer, 5000);
+    auto s1 = std::chrono::steady_clock::now();
+    bool r1 = timeoutSafe(t1.start(), timer, 1 * kj::SECONDS).wait(ws);
+    auto e1 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - s1)
+                  .count();
+    LOG_COUT << "[Main] Task1 done (result=" << r1 << ") elapsed=" << e1
+             << " ms\n";
 
-    ReusableTask task(timer, 5000);
-    auto promise = task.start();
+    // ---------- Task2: 1 s 仕事, timeout 0.5 s ----------
+    LOG_COUT << "[Main] Task2 (1 s) / timeout 0.5 s …\n";
+    ReusableTask t2(timer, 1000);
+    auto s2 = std::chrono::steady_clock::now();
+    bool r2 = timeoutSafe(t2.start(), timer, 500 * kj::MILLISECONDS).wait(ws);
+    auto e2 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - s2)
+                  .count();
+    LOG_COUT << "[Main] Task2 done (result=" << r2 << ") elapsed=" << e2
+             << " ms\n";
 
-    auto timed = timeoutSafe(kj::mv(promise), timer, 1 * kj::SECONDS);
-    timed.wait(ws);
+    // ---------- Task3: 無限ループ, timeout 2 s ----------
+    LOG_COUT << "[Main] Task3 (∞) / timeout 2 s …\n";
+    auto task3 = []() -> kj::Promise<void> {
+      return kj::evalLater([]-> kj::Promise<void> {
+        auto start = std::chrono::steady_clock::now();
+        auto last = start;
+        while (true) {
+          auto now = std::chrono::steady_clock::now();
+          if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last)
+                  .count() >= 100) {
+            LOG_COUT << "[Task3] Elapsed "
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(
+                            now - start)
+                            .count()
+                     << " ms\n";
+            last = now;
+          }
+          for (volatile int i = 0; i < 1000; ++i);  // busy wait 抑制
 
-    LOG_COUT << "[Main] Task completed without timeout.\n";
+          // 10秒後に強制終了
+          if (std::chrono::duration_cast<std::chrono::seconds>(now - start)
+                  .count() >= 10) {
+            LOG_COUT << "[Task3] Force exit after 10 seconds.\n";
+            break;
+          }
+        }
 
-    LOG_COUT << "[Main] Task2 Start \n";
+        return kj::READY_NOW;  // 実際にはここには到達しない
+      });
+    };
 
-    ReusableTask task2(timer, 1000);
-    auto promise2 = task2.start();
-    auto timeout2 =
-        timeoutSafe(kj::mv(promise2), timer, 500 * kj::MILLISECONDS);
+    auto s3 = std::chrono::steady_clock::now();
+    bool r3 = timeoutSafe(task3(), timer, 2 * kj::SECONDS).wait(ws);
+    auto e3 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - s3)
+                  .count();
+    LOG_COUT << "[Main] Task3 done (result=" << r3 << ") elapsed=" << e3
+             << " ms\n";
 
-    LOG_COUT << "[Main] Task2 completed without timeout.\n";
-
-  } catch (const kj::Exception& e) {
-    LOG_COUT << "[Main] Task timeout or error: " << e.getDescription().cStr()
-             << std::endl;
+  } catch (kj::Exception& e) {
+    LOG_COUT << "[Main] Exception: " << e.getDescription().cStr() << '\n';
   }
-
   return 0;
 }
